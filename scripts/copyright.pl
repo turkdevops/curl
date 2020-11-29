@@ -10,7 +10,7 @@
 #
 # This software is licensed as described in the file COPYING, which
 # you should have received as part of this distribution. The terms
-# are also available at https://curl.haxx.se/docs/copyright.html.
+# are also available at https://curl.se/docs/copyright.html.
 #
 # You may opt to use, copy, modify, merge, publish, distribute and/or sell
 # copies of the Software, and permit persons to whom the Software is
@@ -62,17 +62,6 @@ my @skiplist=(
     # macos-framework files
     '^lib\/libcurl.plist',
     '^lib\/libcurl.vers.in',
-
-    # symbian build files we know little about
-    '^packages\/Symbian\/bwins\/libcurlu.def',
-    '^packages\/Symbian\/eabi\/libcurlu.def',
-    '^packages\/Symbian\/group\/bld.inf',
-    '^packages\/Symbian\/group\/curl.iby',
-    '^packages\/Symbian\/group\/curl.mmp',
-    '^packages\/Symbian\/group\/curl.pkg',
-    '^packages\/Symbian\/group\/libcurl.iby',
-    '^packages\/Symbian\/group\/libcurl.mmp',
-    '^packages\/Symbian\/group\/libcurl.pkg',
 
     # vms files
     '^packages\/vms\/build_vms.com',

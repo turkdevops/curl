@@ -11,7 +11,7 @@
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.haxx.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -76,9 +76,7 @@
 /* length of longest IPv6 address string including the trailing null */
 #define MAX_IPADR_LEN sizeof("ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255")
 
-/* Default FTP/IMAP etc response timeout in milliseconds.
-   Symbian OS panics when given a timeout much greater than 1/2 hour.
-*/
+/* Default FTP/IMAP etc response timeout in milliseconds */
 #define RESP_TIMEOUT (120*1000)
 
 /* Max string input length is a precaution against abuse and to detect junk
@@ -245,8 +243,6 @@ struct ssl_config_data {
   struct curl_blob *issuercert_blob;
   curl_ssl_ctx_callback fsslctx; /* function to initialize ssl ctx */
   void *fsslctxp;        /* parameter for call back */
-  char *cert; /* client certificate file name */
-  struct curl_blob *cert_blob;
   char *cert_type; /* format for certificate (default: PEM)*/
   char *key; /* private key file name */
   struct curl_blob *key_blob;
@@ -473,6 +469,7 @@ struct ConnectBits {
                          EPRT doesn't work we disable it for the forthcoming
                          requests */
   BIT(ftp_use_data_ssl); /* Enabled SSL for the data connection */
+  BIT(ftp_use_control_ssl); /* Enabled SSL for the control connection */
 #endif
   BIT(netrc);         /* name+password provided by netrc */
   BIT(bound); /* set true if bind() has already been done on this socket/
@@ -522,7 +519,7 @@ struct Curl_async {
   int port;
   struct Curl_dns_entry *dns;
   int status; /* if done is TRUE, this is the status from the callback */
-  void *os_specific;  /* 'struct thread_data' for Windows */
+  struct thread_data *tdata;
   BIT(done);  /* set TRUE when the lookup is complete */
 };
 
@@ -646,8 +643,23 @@ struct SingleRequest {
      and the 'upload_present' contains the number of bytes available at this
      position */
   char *upload_fromhere;
-  void *protop;       /* Allocated protocol-specific data. Each protocol
-                         handler makes sure this points to data it needs. */
+
+  /* Allocated protocol-specific data. Each protocol handler makes sure this
+     points to data it needs. */
+  union {
+    struct FILEPROTO *file;
+    struct FTP *ftp;
+    struct HTTP *http;
+    struct IMAP *imap;
+    struct ldapreqinfo *ldap;
+    struct MQTT *mqtt;
+    struct POP3 *pop3;
+    struct RTSP *rtsp;
+    struct smb_request *smb;
+    struct SMTP *smtp;
+    struct SSHPROTO *ssh;
+    struct TELNET *telnet;
+  } p;
 #ifndef CURL_DISABLE_DOH
   struct dohdata doh; /* DoH specific data for this request */
 #endif
@@ -741,6 +753,8 @@ struct Curl_handler {
   long defport;           /* Default port. */
   unsigned int protocol;  /* See CURLPROTO_* - this needs to be the single
                              specific protocol bit */
+  unsigned int family;    /* single bit for protocol family; basically the
+                             non-TLS name of the protocol this is */
   unsigned int flags;     /* Extra particular characteristics, see PROTOPT_* */
 };
 
@@ -803,7 +817,11 @@ struct proxy_info {
 /* struct for HTTP CONNECT state data */
 struct http_connect_state {
   struct dynbuf rcvbuf;
-  int keepon;
+  enum keeponval {
+    KEEPON_DONE,
+    KEEPON_CONNECT,
+    KEEPON_IGNORE
+  } keepon;
   curl_off_t cl; /* size of content to read and ignore */
   enum {
     TUNNEL_INIT,    /* init/default/no tunnel state */
@@ -1349,8 +1367,7 @@ struct UrlState {
   int httpversion;       /* the lowest HTTP version*10 reported by any server
                             involved in this request */
 
-#if !defined(WIN32) && !defined(MSDOS) && !defined(__EMX__) && \
-    !defined(__SYMBIAN32__)
+#if !defined(WIN32) && !defined(MSDOS) && !defined(__EMX__)
 /* do FTP line-end conversions on most platforms */
 #define CURL_DO_LINEEND_CONV
   /* for FTP downloads: track CRLF sequences that span blocks */
@@ -1533,35 +1550,26 @@ enum dupstring {
   STRING_RTSP_SESSION_ID, /* Session ID to use */
   STRING_RTSP_STREAM_URI, /* Stream URI for this request */
   STRING_RTSP_TRANSPORT,  /* Transport for this session */
-
   STRING_SSH_PRIVATE_KEY, /* path to the private key file for auth */
   STRING_SSH_PUBLIC_KEY,  /* path to the public key file for auth */
   STRING_SSH_HOST_PUBLIC_KEY_MD5, /* md5 of host public key in ascii hex */
   STRING_SSH_KNOWNHOSTS,  /* file name of knownhosts file */
-
   STRING_PROXY_SERVICE_NAME, /* Proxy service name */
   STRING_SERVICE_NAME,    /* Service name */
   STRING_MAIL_FROM,
   STRING_MAIL_AUTH,
-
   STRING_TLSAUTH_USERNAME_ORIG,  /* TLS auth <username> */
   STRING_TLSAUTH_USERNAME_PROXY, /* TLS auth <username> */
   STRING_TLSAUTH_PASSWORD_ORIG,  /* TLS auth <password> */
   STRING_TLSAUTH_PASSWORD_PROXY, /* TLS auth <password> */
-
   STRING_BEARER,                /* <bearer>, if used */
-
   STRING_UNIX_SOCKET_PATH,      /* path to Unix socket, if used */
-
   STRING_TARGET,                /* CURLOPT_REQUEST_TARGET */
   STRING_DOH,                   /* CURLOPT_DOH_URL */
-
   STRING_ALTSVC,                /* CURLOPT_ALTSVC */
-
+  STRING_HSTS,                  /* CURLOPT_HSTS */
   STRING_SASL_AUTHZID,          /* CURLOPT_SASL_AUTHZID */
-
   STRING_TEMP_URL,              /* temp URL storage for proxy use */
-
   STRING_DNS_SERVERS,
   STRING_DNS_INTERFACE,
   STRING_DNS_LOCAL_IP4,
@@ -1650,7 +1658,12 @@ struct UserDefined {
   curl_conv_callback convtonetwork;
   /* function to convert from UTF-8 encoding: */
   curl_conv_callback convfromutf8;
-
+#ifdef USE_HSTS
+  curl_hstsread_callback hsts_read;
+  void *hsts_read_userp;
+  curl_hstswrite_callback hsts_write;
+  void *hsts_write_userp;
+#endif
   void *progress_client; /* pointer to pass to the progress callback */
   void *ioctl_client;   /* pointer to pass to the ioctl callback */
   long timeout;         /* in milliseconds, 0 means no timeout */
@@ -1901,7 +1914,10 @@ struct Curl_easy {
                                   NOTE that the 'cookie' field in the
                                   UserDefined struct defines if the "engine"
                                   is to be used or not. */
-#ifdef USE_ALTSVC
+#ifdef USE_HSTS
+  struct hsts *hsts;
+#endif
+#ifndef CURL_DISABLE_ALTSVC
   struct altsvcinfo *asi;      /* the alt-svc cache */
 #endif
   struct Progress progress;    /* for all the progress meter data */

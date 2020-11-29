@@ -9,7 +9,7 @@
 #
 # This software is licensed as described in the file COPYING, which
 # you should have received as part of this distribution. The terms
-# are also available at https://curl.haxx.se/docs/copyright.html.
+# are also available at https://curl.se/docs/copyright.html.
 #
 # You may opt to use, copy, modify, merge, publish, distribute and/or sell
 # copies of the Software, and permit persons to whom the Software is
@@ -58,14 +58,15 @@ noinst_PROGRAMS = chkhostname libauthretry libntlmconnect                \
  lib1550 lib1551 lib1552 lib1553 lib1554 lib1555 lib1556 lib1557 \
  lib1558 lib1559 lib1560 lib1564 lib1565 lib1567 \
  lib1591 lib1592 lib1593 lib1594 lib1596 \
-         lib1905 lib1906 lib1907 lib1908 lib1910 lib1911 lib1912 \
+         lib1905 lib1906 lib1907 lib1908 lib1910 lib1911 lib1912 lib1913 \
+         lib1915 \
          lib3010
 
 chkdecimalpoint_SOURCES = chkdecimalpoint.c ../../lib/mprintf.c \
  ../../lib/curl_ctype.c  ../../lib/dynbuf.c ../../lib/strdup.c
 chkdecimalpoint_LDADD =
 chkdecimalpoint_CPPFLAGS = $(AM_CPPFLAGS) -DCURL_STATICLIB \
- -DCURLX_NO_MEMORY_CALLBACKS
+ -DCURLX_NO_MEMORY_CALLBACKS -DBUILDING_LIBCURL
 
 chkhostname_SOURCES = chkhostname.c ../../lib/curl_gethostname.c
 chkhostname_LDADD = @CURL_NETWORK_LIBS@
@@ -644,6 +645,14 @@ lib1911_CPPFLAGS = $(AM_CPPFLAGS)
 lib1912_SOURCES = lib1912.c $(SUPPORTFILES) $(TESTUTIL) $(WARNLESS)
 lib1912_LDADD = $(TESTUTIL_LIBS)
 lib1912_CPPFLAGS = $(AM_CPPFLAGS)
+
+lib1913_SOURCES = lib1913.c $(SUPPORTFILES) $(TESTUTIL) $(WARNLESS)
+lib1913_LDADD = $(TESTUTIL_LIBS)
+lib1913_CPPFLAGS = $(AM_CPPFLAGS)
+
+lib1915_SOURCES = lib1915.c $(SUPPORTFILES) $(TESTUTIL) $(WARNLESS)
+lib1915_LDADD = $(TESTUTIL_LIBS)
+lib1915_CPPFLAGS = $(AM_CPPFLAGS)
 
 lib3010_SOURCES = lib3010.c $(SUPPORTFILES) $(TESTUTIL) $(WARNLESS)
 lib3010_LDADD = $(TESTUTIL_LIBS)
