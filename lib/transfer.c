@@ -923,7 +923,7 @@ CURLcode Curl_done_sending(struct Curl_easy *data,
   return CURLE_OK;
 }
 
-#if defined(WIN32) && !defined(USE_LWIPSOCK)
+#if defined(WIN32) && defined(USE_WINSOCK)
 #ifndef SIO_IDEAL_SEND_BACKLOG_QUERY
 #define SIO_IDEAL_SEND_BACKLOG_QUERY 0x4004747B
 #endif
@@ -1639,7 +1639,8 @@ CURLcode Curl_follow(struct Curl_easy *data,
   DEBUGASSERT(data->state.uh);
   uc = curl_url_set(data->state.uh, CURLUPART_URL, newurl,
                     (type == FOLLOW_FAKE) ? CURLU_NON_SUPPORT_SCHEME :
-                    ((type == FOLLOW_REDIR) ? CURLU_URLENCODE : 0) );
+                    ((type == FOLLOW_REDIR) ? CURLU_URLENCODE : 0) |
+                    CURLU_ALLOW_SPACE);
   if(uc) {
     if(type != FOLLOW_FAKE)
       return Curl_uc_to_curlcode(uc);

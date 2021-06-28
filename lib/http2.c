@@ -200,7 +200,9 @@ static bool http2_connisdead(struct Curl_easy *data, struct connectdata *conn)
               (int)nread);
         httpc->nread_inbuf = 0;
         httpc->inbuflen = nread;
-        (void)h2_process_pending_input(data, httpc, &result);
+        if(h2_process_pending_input(data, httpc, &result) < 0)
+          /* immediate error, considered dead */
+          dead = TRUE;
       }
       else
         /* the read failed so let's say this is dead anyway */
@@ -2232,7 +2234,7 @@ CURLcode Curl_http2_setup(struct Curl_easy *data,
     return result;
   }
 
-  infof(data, "Using HTTP2, server supports multi-use\n");
+  infof(data, "Using HTTP2, server supports multiplexing\n");
   stream->upload_left = 0;
   stream->upload_mem = NULL;
   stream->upload_len = 0;

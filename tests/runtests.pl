@@ -168,7 +168,7 @@ my $proxy_address;
 my %custom_skip_reasons;
 
 my $SSHSRVMD5 = "[uninitialized]"; # MD5 of ssh server public key
-my $VERSION;             # curl's reported version number
+my $VERSION="";          # curl's reported version number
 
 my $srcdir = $ENV{'srcdir'} || '.';
 my $CURL="../src/curl".exe_ext('TOOL'); # what curl executable to run on the tests
@@ -253,7 +253,6 @@ my $has_kerberos;   # set if libcurl is built with Kerberos support
 my $has_spnego;     # set if libcurl is built with SPNEGO support
 my $has_charconv;   # set if libcurl is built with CharConv support
 my $has_tls_srp;    # set if libcurl is built with TLS-SRP support
-my $has_metalink;   # set if curl is built with Metalink support
 my $has_http2;      # set if libcurl is built with HTTP2 support
 my $has_httpsproxy; # set if libcurl is built with HTTPS-proxy support
 my $has_crypto;     # set if libcurl is built with cryptographic support
@@ -342,6 +341,7 @@ my $clearlocks;   # force removal of files by killing locking processes
 my $listonly;     # only list the tests
 my $postmortem;   # display detailed info about failed tests
 my $run_event_based; # run curl with --test-event to test the event API
+my $run_disabeled; # run the specific tests even if listed in DISABLED
 
 my %run;          # running server
 my %doesntrun;    # servers that don't work, identified by pidfile
@@ -584,7 +584,7 @@ sub get_disttests {
         if(($_ =~ /^#/) ||($_ !~ /test/)) {
             next;
         }
-        $disttests .= join("", $_);
+        $disttests .= $_;
     }
     close(D);
 }
@@ -2852,7 +2852,6 @@ sub setupfeatures {
     $feature{"ld_preload"} = ($has_ldpreload && !$debug_build);
     $feature{"libz"} = $has_libz;
     $feature{"manual"} = $has_manual;
-    $feature{"Metalink"} = $has_metalink;
     $feature{"MinGW"} = $has_mingw;
     $feature{"MultiSSL"} = $has_multissl;
     $feature{"NSS"} = $has_nss;
@@ -3102,10 +3101,6 @@ sub checksystem {
             if($feat =~ /TLS-SRP/i) {
                 # TLS-SRP enabled
                 $has_tls_srp=1;
-            }
-            if($feat =~ /Metalink/i) {
-                # Metalink enabled
-                $has_metalink=1;
             }
             if($feat =~ /PSL/i) {
                 # PSL enabled
@@ -3561,11 +3556,16 @@ sub singletest {
     # timestamp test preparation start
     $timeprepini{$testnum} = Time::HiRes::time();
 
-    if($disttests !~ /test$testnum\W/ ) {
+    if($disttests !~ /test$testnum(\W|\z)/ ) {
         logmsg "Warning: test$testnum not present in tests/data/Makefile.inc\n";
     }
     if($disabled{$testnum}) {
-        logmsg "Warning: test$testnum is explicitly disabled\n";
+        if(!$run_disabeled) {
+            $why = "listed in DISABLED";
+        }
+        else {
+            logmsg "Warning: test$testnum is explicitly disabled\n";
+        }
     }
     if($ignored{$testnum}) {
         logmsg "Warning: test$testnum result is ignored\n";
@@ -5407,6 +5407,10 @@ while(@ARGV) {
         # run the tests cases event based if possible
         $run_event_based=1;
     }
+    elsif($ARGV[0] eq "-f") {
+        # force - run the test case even if listed in DISABLED
+        $run_disabeled=1;
+    }
     elsif($ARGV[0] eq "-E") {
         # load additional reasons to skip tests
         shift @ARGV;
@@ -5554,6 +5558,7 @@ Usage: runtests.pl [options] [test selection(s)]
   -d       display server debug info
   -e       event-based execution
   -E file  load the specified file to exclude certain tests
+  -f       forcibly run even if disabled
   -g       run the test case with gdb
   -gw      run the test case with gdb as a windowed application
   -h       this help text
@@ -5588,16 +5593,7 @@ EOHELP
         $number = $1;
         if($fromnum >= 0) {
             for my $n ($fromnum .. $number) {
-                if($disabled{$n}) {
-                    # skip disabled test cases
-                    my $why = "configured as DISABLED";
-                    $skipped++;
-                    $skipped{$why}++;
-                    $teststat[$n]=$why; # store reason for this test case
-                }
-                else {
-                    push @testthis, $n;
-                }
+                push @testthis, $n;
             }
             $fromnum = -1;
         }

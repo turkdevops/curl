@@ -456,6 +456,15 @@
 #endif
 #endif
 
+#ifndef SSIZE_T_MAX
+/* some limits.h headers have this defined, some don't */
+#if defined(SIZEOF_SIZE_T) && (SIZEOF_SIZE_T > 4)
+#define SSIZE_T_MAX 9223372036854775807
+#else
+#define SSIZE_T_MAX 2147483647
+#endif
+#endif
+
 /*
  * Arg 2 type for gethostname in case it hasn't been defined in config file.
  */
@@ -813,6 +822,22 @@ int getpwuid_r(uid_t uid, struct passwd *pwd, char *buf,
 
 #if defined(USE_NGTCP2) || defined(USE_QUICHE)
 #define ENABLE_QUIC
+#endif
+
+#if defined(USE_UNIX_SOCKETS) && defined(WIN32)
+#  if defined(__MINGW32__) && !defined(LUP_SECURE)
+     typedef u_short ADDRESS_FAMILY; /* Classic mingw, 11y+ old mingw-w64 */
+#  endif
+#  if !defined(UNIX_PATH_MAX)
+     /* Replicating logic present in afunix.h
+        (distributed with newer Windows 10 SDK versions only) */
+#    define UNIX_PATH_MAX 108
+     /* !checksrc! disable TYPEDEFSTRUCT 1 */
+     typedef struct sockaddr_un {
+       ADDRESS_FAMILY sun_family;
+       char sun_path[UNIX_PATH_MAX];
+     } SOCKADDR_UN, *PSOCKADDR_UN;
+#  endif
 #endif
 
 #endif /* HEADER_CURL_SETUP_H */

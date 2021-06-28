@@ -106,15 +106,6 @@ if [ "$TRAVIS_OS_NAME" = linux -a "$LIBRESSL" ]; then
   make install
 fi
 
-if [ "$TRAVIS_OS_NAME" = linux -a "$HYPER" ]; then
-  cd $HOME
-  git clone --depth=1 https://github.com/hyperium/hyper.git
-  curl https://sh.rustup.rs -sSf | sh -s -- -y
-  source $HOME/.cargo/env
-  cd $HOME/hyper
-  RUSTFLAGS="--cfg hyper_unstable_ffi" cargo build --features client,http1,http2,ffi
-fi
-
 if [ "$TRAVIS_OS_NAME" = linux -a "$QUICHE" ]; then
   cd $HOME
   git clone --depth=1 --recursive https://github.com/cloudflare/quiche.git
@@ -128,7 +119,7 @@ fi
 
 if [ "$TRAVIS_OS_NAME" = linux -a "$RUSTLS_VERSION" ]; then
   cd $HOME
-  git clone --depth=1 --recursive https://github.com/abetterinternet/crustls.git -b "$RUSTLS_VERSION"
+  git clone --depth=1 --recursive https://github.com/rustls/rustls-ffi.git -b "$RUSTLS_VERSION"
   curl https://sh.rustup.rs -sSf | sh -s -- -y
   source $HOME/.cargo/env
   cargo install cbindgen
