@@ -1,3 +1,24 @@
+#***************************************************************************
+#                                  _   _ ____  _
+#  Project                     ___| | | |  _ \| |
+#                             / __| | | | |_) | |
+#                            | (__| |_| |  _ <| |___
+#                             \___|\___/|_| \_\_____|
+#
+# Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+#
+# This software is licensed as described in the file COPYING, which
+# you should have received as part of this distribution. The terms
+# are also available at https://curl.haxx.se/docs/copyright.html.
+#
+# You may opt to use, copy, modify, merge, publish, distribute and/or sell
+# copies of the Software, and permit persons to whom the Software is
+# furnished to do so, under the terms of the COPYING file.
+#
+# This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
+# KIND, either express or implied.
+#
+###########################################################################
 # Shared between Makefile.am and CMakeLists.txt
 
 DPAGES =					\
@@ -38,6 +59,8 @@ DPAGES =					\
   dump-header.d					\
   egd-file.d					\
   engine.d					\
+  etag-compare.d                \
+  etag-save.d                   \
   expect100-timeout.d				\
   fail-early.d					\
   fail.d					\
@@ -83,6 +106,7 @@ DPAGES =					\
   login-options.d				\
   mail-auth.d					\
   mail-from.d					\
+  mail-rcpt-allowfails.d                        \
   mail-rcpt.d					\
   manual.d					\
   max-filesize.d				\
@@ -97,14 +121,16 @@ DPAGES =					\
   no-buffer.d					\
   no-keepalive.d				\
   no-npn.d					\
+  no-progress-meter.d                           \
   no-sessionid.d				\
   noproxy.d					\
   ntlm.d ntlm-wb.d				\
   oauth2-bearer.d				\
   output.d                                      \
-  pass.d                			\
-  parallel.d                                    \
+  parallel-immediate.d                          \
   parallel-max.d                                \
+  parallel.d                                    \
+  pass.d                			\
   path-as-is.d					\
   pinnedpubkey.d				\
   post301.d					\
@@ -158,7 +184,7 @@ DPAGES =					\
   retry-delay.d					\
   retry-max-time.d				\
   retry.d					\
-  sasl-authzid.d					\
+  sasl-authzid.d				\
   sasl-ir.d					\
   service-name.d				\
   show-error.d					\
@@ -175,6 +201,7 @@ DPAGES =					\
   ssl-allow-beast.d				\
   ssl-no-revoke.d				\
   ssl-reqd.d					\
+  ssl-revoke-best-effort.d			\
   ssl.d						\
   sslv2.d sslv3.d				\
   stderr.d					\

@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2019, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -48,6 +48,8 @@
 
 #ifdef HAVE_SYS_SELECT_H
 #include <sys/select.h>
+#elif defined(HAVE_UNISTD_H)
+#include <unistd.h>
 #endif
 
 #ifndef HAVE_SOCKET
@@ -176,7 +178,7 @@ CURLcode Curl_fillreadbuffer(struct connectdata *conn, size_t bytes,
 #ifndef CURL_DISABLE_HTTP
   if(data->state.trailers_state == TRAILERS_INITIALIZED) {
     struct curl_slist *trailers = NULL;
-    CURLcode c;
+    CURLcode result;
     int trailers_ret_code;
 
     /* at this point we already verified that the callback exists
@@ -195,17 +197,18 @@ CURLcode Curl_fillreadbuffer(struct connectdata *conn, size_t bytes,
                                                    data->set.trailer_data);
     Curl_set_in_callback(data, false);
     if(trailers_ret_code == CURL_TRAILERFUNC_OK) {
-      c = Curl_http_compile_trailers(trailers, data->state.trailers_buf, data);
+      result = Curl_http_compile_trailers(trailers, &data->state.trailers_buf,
+                                          data);
     }
     else {
       failf(data, "operation aborted by trailing headers callback");
       *nreadp = 0;
-      c = CURLE_ABORTED_BY_CALLBACK;
+      result = CURLE_ABORTED_BY_CALLBACK;
     }
-    if(c != CURLE_OK) {
+    if(result) {
       Curl_add_buffer_free(&data->state.trailers_buf);
       curl_slist_free_all(trailers);
-      return c;
+      return result;
     }
     infof(data, "Successfully compiled trailers.\r\n");
     curl_slist_free_all(trailers);
@@ -483,8 +486,9 @@ CURLcode Curl_readrewind(struct connectdata *conn)
   return CURLE_OK;
 }
 
-static int data_pending(const struct connectdata *conn)
+static int data_pending(const struct Curl_easy *data)
 {
+  struct connectdata *conn = data->conn;
   /* in the case of libssh2, we can never be really sure that we have emptied
      its internal buffers so we MUST always try until we get EAGAIN back */
   return conn->handler->protocol&(CURLPROTO_SCP|CURLPROTO_SFTP) ||
@@ -498,6 +502,8 @@ static int data_pending(const struct connectdata *conn)
        be called and we cannot signal the HTTP/2 stream has closed. As
        a workaround, we return nonzero here to call http2_recv. */
     ((conn->handler->protocol&PROTO_FAMILY_HTTP) && conn->httpversion >= 20);
+#elif defined(ENABLE_QUIC)
+    Curl_ssl_data_pending(conn, FIRSTSOCKET) || Curl_quic_data_pending(data);
 #else
     Curl_ssl_data_pending(conn, FIRSTSOCKET);
 #endif
@@ -564,17 +570,20 @@ static CURLcode readwrite_data(struct Curl_easy *data,
     bool is_empty_data = FALSE;
     size_t buffersize = data->set.buffer_size;
     size_t bytestoread = buffersize;
+#ifdef USE_NGHTTP2
+    bool is_http2 = ((conn->handler->protocol & PROTO_FAMILY_HTTP) &&
+                     (conn->httpversion == 20));
+#endif
 
     if(
-#if defined(USE_NGHTTP2)
+#ifdef USE_NGHTTP2
        /* For HTTP/2, read data without caring about the content
           length. This is safe because body in HTTP/2 is always
           segmented thanks to its framing layer. Meanwhile, we have to
           call Curl_read to ensure that http2_handle_stream_close is
           called when we read all incoming bytes for a particular
           stream. */
-       !((conn->handler->protocol & PROTO_FAMILY_HTTP) &&
-         conn->httpversion == 20) &&
+       !is_http2 &&
 #endif
        k->size != -1 && !k->header) {
       /* make sure we don't read too much */
@@ -617,9 +626,14 @@ static CURLcode readwrite_data(struct Curl_easy *data,
       k->buf[nread] = 0;
     }
     else {
-      /* if we receive 0 or less here, the server closed the connection
-         and we bail out from this! */
-      DEBUGF(infof(data, "nread <= 0, server closed connection, bailing\n"));
+      /* if we receive 0 or less here, either the http2 stream is closed or the
+         server closed the connection and we bail out from this! */
+#ifdef USE_NGHTTP2
+      if(is_http2 && !nread)
+        DEBUGF(infof(data, "nread == 0, stream closed, bailing\n"));
+      else
+#endif
+        DEBUGF(infof(data, "nread <= 0, server closed connection, bailing\n"));
       k->keepon &= ~KEEP_RECV;
       break;
     }
@@ -775,14 +789,14 @@ static CURLcode readwrite_data(struct Curl_easy *data,
          * and writes away the data. The returned 'nread' holds the number
          * of actual data it wrote to the client.
          */
-
+        CURLcode extra;
         CHUNKcode res =
-          Curl_httpchunk_read(conn, k->str, nread, &nread);
+          Curl_httpchunk_read(conn, k->str, nread, &nread, &extra);
 
         if(CHUNKE_OK < res) {
-          if(CHUNKE_WRITE_ERROR == res) {
-            failf(data, "Failed writing data");
-            return CURLE_WRITE_ERROR;
+          if(CHUNKE_PASSTHRU_ERROR == res) {
+            failf(data, "Failed reading the chunked-encoded stream");
+            return extra;
           }
           failf(data, "%s in chunked-encoding", Curl_chunked_strerror(res));
           return CURLE_RECV_ERROR;
@@ -886,7 +900,7 @@ static CURLcode readwrite_data(struct Curl_easy *data,
 
     } /* if(!header and data to read) */
 
-    if(conn->handler->readwrite && excess && !conn->bits.stream_was_rewound) {
+    if(conn->handler->readwrite && excess) {
       /* Parse the excess data */
       k->str += nread;
 
@@ -917,7 +931,7 @@ static CURLcode readwrite_data(struct Curl_easy *data,
       break;
     }
 
-  } while(data_pending(conn) && maxloops--);
+  } while(data_pending(data) && maxloops--);
 
   if(maxloops <= 0) {
     /* we mark it as read-again-please */
@@ -942,7 +956,9 @@ CURLcode Curl_done_sending(struct connectdata *conn,
 {
   k->keepon &= ~KEEP_SEND; /* we're done writing */
 
+  /* These functions should be moved into the handler struct! */
   Curl_http2_done_sending(conn);
+  Curl_quic_done_sending(conn);
 
   if(conn->bits.rewindaftersend) {
     CURLcode result = Curl_readrewind(conn);
@@ -1171,7 +1187,7 @@ static CURLcode readwrite_upload(struct Curl_easy *data,
     }
 
 
-  } WHILE_FALSE; /* just to break out from! */
+  } while(0); /* just to break out from! */
 
   return CURLE_OK;
 }
@@ -1228,9 +1244,7 @@ CURLcode Curl_readwrite(struct connectdata *conn,
   /* We go ahead and do a read if we have a readable socket or if
      the stream was rewound (in which case we have data in a
      buffer) */
-  if((k->keepon & KEEP_RECV) &&
-     ((select_res & CURL_CSELECT_IN) || conn->bits.stream_was_rewound)) {
-
+  if((k->keepon & KEEP_RECV) && (select_res & CURL_CSELECT_IN)) {
     result = readwrite_data(data, conn, k, &didwhat, done, comeback);
     if(result || *done)
       return result;
@@ -1507,6 +1521,7 @@ CURLcode Curl_pretransfer(struct Curl_easy *data)
       }
     }
 #endif
+    Curl_http2_init_state(&data->state);
   }
 
   return result;
@@ -1588,7 +1603,8 @@ CURLcode Curl_follow(struct Curl_easy *data,
 
   DEBUGASSERT(data->state.uh);
   uc = curl_url_set(data->state.uh, CURLUPART_URL, newurl,
-                    (type == FOLLOW_FAKE) ? CURLU_NON_SUPPORT_SCHEME : 0);
+                    (type == FOLLOW_FAKE) ? CURLU_NON_SUPPORT_SCHEME :
+                    ((type == FOLLOW_REDIR) ? CURLU_URLENCODE : 0) );
   if(uc) {
     if(type != FOLLOW_FAKE)
       return Curl_uc_to_curlcode(uc);
@@ -1701,12 +1717,19 @@ CURLcode Curl_follow(struct Curl_easy *data,
     break;
 
   case 303: /* See Other */
-    /* Disable both types of POSTs, unless the user explicitly
-       asks for POST after POST */
-    if(data->set.httpreq != HTTPREQ_GET
-      && !(data->set.keep_post & CURL_REDIR_POST_303)) {
-      data->set.httpreq = HTTPREQ_GET; /* enforce GET request */
-      infof(data, "Disables POST, goes with %s\n",
+    /* 'See Other' location is not the resource but a substitute for the
+     * resource. In this case we switch the method to GET/HEAD, unless the
+     * method is POST and the user specified to keep it as POST.
+     * https://github.com/curl/curl/issues/5237#issuecomment-614641049
+     */
+    if(data->set.httpreq != HTTPREQ_GET &&
+       ((data->set.httpreq != HTTPREQ_POST &&
+         data->set.httpreq != HTTPREQ_POST_FORM &&
+         data->set.httpreq != HTTPREQ_POST_MIME) ||
+        !(data->set.keep_post & CURL_REDIR_POST_303))) {
+      data->set.httpreq = HTTPREQ_GET;
+      data->set.upload = false;
+      infof(data, "Switch to %s\n",
             data->set.opt_no_body?"HEAD":"GET");
     }
     break;
@@ -1773,6 +1796,12 @@ CURLcode Curl_retry_request(struct connectdata *conn,
     retry = TRUE;
   }
   if(retry) {
+#define CONN_MAX_RETRIES 5
+    if(conn->retrycount++ >= CONN_MAX_RETRIES) {
+      failf(data, "Connection died, tried %d times before giving up",
+            CONN_MAX_RETRIES);
+      return CURLE_SEND_ERROR;
+    }
     infof(conn->data, "Connection died, retrying a fresh connect\n");
     *url = strdup(conn->data->change.url);
     if(!*url)
@@ -1815,15 +1844,21 @@ Curl_setup_transfer(
 {
   struct SingleRequest *k = &data->req;
   struct connectdata *conn = data->conn;
+  struct HTTP *http = data->req.protop;
+  bool httpsending = ((conn->handler->protocol&PROTO_FAMILY_HTTP) &&
+                      (http->sending == HTTPSEND_REQUEST));
   DEBUGASSERT(conn != NULL);
   DEBUGASSERT((sockindex <= 1) && (sockindex >= -1));
 
-  if(conn->bits.multiplex || conn->httpversion == 20) {
+  if(conn->bits.multiplex || conn->httpversion == 20 || httpsending) {
     /* when multiplexing, the read/write sockets need to be the same! */
     conn->sockfd = sockindex == -1 ?
       ((writesockindex == -1 ? CURL_SOCKET_BAD : conn->sock[writesockindex])) :
       conn->sock[sockindex];
     conn->writesockfd = conn->sockfd;
+    if(httpsending)
+      /* special and very HTTP-specific */
+      writesockindex = FIRSTSOCKET;
   }
   else {
     conn->sockfd = sockindex == -1 ?
@@ -1851,7 +1886,6 @@ Curl_setup_transfer(
       k->keepon |= KEEP_RECV;
 
     if(writesockindex != -1) {
-      struct HTTP *http = data->req.protop;
       /* HTTP 1.1 magic:
 
          Even if we require a 100-return code before uploading data, we might

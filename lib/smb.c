@@ -606,6 +606,7 @@ static CURLcode smb_send_and_recv(struct connectdata *conn, void **msg)
 {
   struct smb_conn *smbc = &conn->proto.smbc;
   CURLcode result;
+  *msg = NULL; /* if it returns early */
 
   /* Check if there is data in the transfer buffer */
   if(!smbc->send_size && smbc->upload_size) {
@@ -681,7 +682,8 @@ static CURLcode smb_connection_state(struct connectdata *conn, bool *done)
 
   switch(smbc->state) {
   case SMB_NEGOTIATE:
-    if(h->status || smbc->got < sizeof(*nrsp) + sizeof(smbc->challenge) - 1) {
+    if((smbc->got < sizeof(*nrsp) + sizeof(smbc->challenge) - 1) ||
+       h->status) {
       connclose(conn, "SMB: negotiation failed");
       return CURLE_COULDNT_CONNECT;
     }
