@@ -2479,6 +2479,27 @@ if test "$want_idn" = "yes"; then
   fi
 fi
 
+dnl -------------------------------------------------
+dnl macidn
+dnl -------------------------------------------------
+if test "x$want_idn" != "xyes" -a "x$want_winidn" != "xyes"; then
+  dnl only check if no other IDN option has been selected
+AC_MSG_CHECKING([whether to support native IDN on macOS])
+AC_ARG_ENABLE(macidn,
+AC_HELP_STRING([--enable-macidn],[Enable native IDN on macOS])
+AC_HELP_STRING([--disable-macidn],[Disable native IDN on macOS]),
+[ case "$enableval" in
+  no)  AC_MSG_RESULT(no)
+       ;;
+  *)   AC_MSG_RESULT(yes)
+       curl_idn_msg="enabled (macidn)"
+       AC_DEFINE(USE_MACIDN, 1, [define 1 to use native macOS IDN])
+       ;;
+  esac ],
+       AC_MSG_RESULT(no)
+)
+fi
+
 
 dnl Let's hope this split URL remains working:
 dnl https://www15.software.ibm.com/doc_link/en_US/a_doc_lib/aixprggd/ \
