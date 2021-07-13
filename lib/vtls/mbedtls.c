@@ -828,7 +828,8 @@ static ssize_t mbed_recv(struct Curl_easy *data, int num,
   if(ret <= 0) {
     if(ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY)
       return 0;
-
+    else if(!ret)
+      return 0;
     *curlcode = (ret == MBEDTLS_ERR_SSL_WANT_READ) ?
       CURLE_AGAIN : CURLE_RECV_ERROR;
     return -1;
