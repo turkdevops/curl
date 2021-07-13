@@ -59,6 +59,12 @@ bool Curl_auth_is_spnego_supported(void)
                                               TEXT(SP_NAME_NEGOTIATE),
                                               &SecurityPackage);
 
+  /* Release the package buffer as it is not required anymore */
+  if(status == SEC_E_OK) {
+    s_pSecFn->FreeContextBuffer(SecurityPackage);
+  }
+
+
   return (status == SEC_E_OK ? TRUE : FALSE);
 }
 
@@ -165,7 +171,7 @@ CURLcode Curl_auth_decode_spnego_message(struct Curl_easy *data,
                                          nego->p_identity, NULL, NULL,
                                          nego->credentials, &expiry);
     if(nego->status != SEC_E_OK)
-      return CURLE_LOGIN_DENIED;
+      return CURLE_AUTH_ERROR;
 
     /* Allocate our new context handle */
     nego->context = calloc(1, sizeof(CtxtHandle));
@@ -252,7 +258,7 @@ CURLcode Curl_auth_decode_spnego_message(struct Curl_easy *data,
     failf(data, "InitializeSecurityContext failed: %s",
           Curl_sspi_strerror(nego->status, buffer, sizeof(buffer)));
 
-    if(nego->status == SEC_E_INSUFFICIENT_MEMORY)
+    if(nego->status == (DWORD)SEC_E_INSUFFICIENT_MEMORY)
       return CURLE_OUT_OF_MEMORY;
 
     return CURLE_AUTH_ERROR;
@@ -266,7 +272,7 @@ CURLcode Curl_auth_decode_spnego_message(struct Curl_easy *data,
       failf(data, "CompleteAuthToken failed: %s",
             Curl_sspi_strerror(nego->status, buffer, sizeof(buffer)));
 
-      if(nego->status == SEC_E_INSUFFICIENT_MEMORY)
+      if(nego->status == (DWORD)SEC_E_INSUFFICIENT_MEMORY)
         return CURLE_OUT_OF_MEMORY;
 
       return CURLE_AUTH_ERROR;
