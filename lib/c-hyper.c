@@ -203,11 +203,9 @@ static int hyper_body_chunk(void *userdata, const hyper_buf *chunk)
       }
       else { /* >= 4xx */
         k->exp100 = EXP100_FAILED;
-        done = TRUE;
       }
     }
-    if(data->state.hconnect &&
-       (data->req.httpcode/100 != 2)) {
+    if(data->state.hconnect && (data->req.httpcode/100 != 2)) {
       done = TRUE;
       result = CURLE_OK;
     }
@@ -259,6 +257,9 @@ static CURLcode status_line(struct Curl_easy *data,
   conn->httpversion =
     http_version == HYPER_HTTP_VERSION_1_1 ? 11 :
     (http_version == HYPER_HTTP_VERSION_2 ? 20 : 10);
+  if(http_version == HYPER_HTTP_VERSION_1_0)
+    data->state.httpwant = CURL_HTTP_VERSION_1_0;
+
   data->req.httpcode = http_status;
 
   result = Curl_http_statusline(data, conn);
@@ -596,6 +597,16 @@ static int uploadpostfields(void *userdata, hyper_context *ctx,
 {
   struct Curl_easy *data = (struct Curl_easy *)userdata;
   (void)ctx;
+  if(data->req.exp100 > EXP100_SEND_DATA) {
+    if(data->req.exp100 == EXP100_FAILED)
+      return HYPER_POLL_ERROR;
+
+    /* still waiting confirmation */
+    if(data->hyp.exp100_waker)
+      hyper_waker_free(data->hyp.exp100_waker);
+    data->hyp.exp100_waker = hyper_context_waker(ctx);
+    return HYPER_POLL_PENDING;
+  }
   if(data->req.upload_done)
     *chunk = NULL; /* nothing more to deliver */
   else {
@@ -723,6 +734,48 @@ static CURLcode cookies(struct Curl_easy *data,
   return result;
 }
 
+/* called on 1xx responses */
+static void http1xx_cb(void *arg, struct hyper_response *resp)
+{
+  struct Curl_easy *data = (struct Curl_easy *)arg;
+  hyper_headers *headers = NULL;
+  CURLcode result = CURLE_OK;
+  uint16_t http_status;
+  int http_version;
+  const uint8_t *reasonp;
+  size_t reason_len;
+
+  infof(data, "Got HTTP 1xx informational");
+
+  http_status = hyper_response_status(resp);
+  http_version = hyper_response_version(resp);
+  reasonp = hyper_response_reason_phrase(resp);
+  reason_len = hyper_response_reason_phrase_len(resp);
+
+  result = status_line(data, data->conn,
+                       http_status, http_version, reasonp, reason_len);
+  if(!result) {
+    headers = hyper_response_headers(resp);
+    if(!headers) {
+      failf(data, "hyperstream: couldn't get 1xx response headers");
+      result = CURLE_RECV_ERROR;
+    }
+  }
+  data->state.hresult = result;
+
+  if(!result) {
+    /* the headers are already received */
+    hyper_headers_foreach(headers, hyper_each_header, data);
+    /* this callback also sets data->state.hresult on error */
+
+    if(empty_header(data))
+      result = CURLE_OUT_OF_MEMORY;
+  }
+
+  if(data->state.hresult)
+    infof(data, "ERROR in 1xx, bail out!");
+}
+
 /*
  * Curl_http() gets called from the generic multi_do() function when a HTTP
  * request is to be performed. This creates and sends a properly constructed
@@ -746,6 +799,7 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
   Curl_HttpReq httpreq;
   bool h2 = FALSE;
   const char *te = NULL; /* transfer-encoding */
+  hyper_code rc;
 
   /* Always consider the DO phase done after this function call, even if there
      may be parts of the request that is not yet sent, since we can deal with
@@ -849,7 +903,7 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
     goto error;
   }
 
-  if(data->state.httpwant == CURL_HTTP_VERSION_1_0) {
+  if(!Curl_use_http_1_1plus(data, conn)) {
     if(HYPERE_OK != hyper_request_set_version(req,
                                               HYPER_HTTP_VERSION_1_0)) {
       failf(data, "error setting HTTP version");
@@ -871,6 +925,10 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
     failf(data, "hyper_request_headers");
     goto error;
   }
+
+  rc = hyper_request_on_informational(req, http1xx_cb, data);
+  if(rc)
+    return CURLE_OUT_OF_MEMORY;
 
   result = Curl_http_body(data, conn, httpreq, &te);
   if(result)
