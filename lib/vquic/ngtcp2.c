@@ -559,8 +559,8 @@ cb_acked_stream_data_offset(ngtcp2_conn *tconn, int64_t stream_id,
   return 0;
 }
 
-static int cb_stream_close(ngtcp2_conn *tconn, int64_t stream_id,
-                           uint64_t app_error_code,
+static int cb_stream_close(ngtcp2_conn *tconn, uint32_t flags,
+                           int64_t stream_id, uint64_t app_error_code,
                            void *user_data, void *stream_user_data)
 {
   struct quicsocket *qs = (struct quicsocket *)user_data;
@@ -568,6 +568,10 @@ static int cb_stream_close(ngtcp2_conn *tconn, int64_t stream_id,
   (void)tconn;
   (void)stream_user_data;
   /* stream is closed... */
+
+  if(!(flags & NGTCP2_STREAM_CLOSE_FLAG_APP_ERROR_CODE_SET)) {
+    app_error_code = NGHTTP3_H3_NO_ERROR;
+  }
 
   rv = nghttp3_conn_close_stream(qs->h3conn, stream_id,
                                  app_error_code);
@@ -1712,8 +1716,7 @@ static CURLcode ng_flush_egress(struct Curl_easy *data,
   int rv;
   ssize_t sent;
   ssize_t outlen;
-  uint8_t out[NGTCP2_MAX_PKTLEN_IPV4];
-  size_t pktlen;
+  uint8_t out[NGTCP2_MAX_UDP_PAYLOAD_SIZE];
   ngtcp2_path_storage ps;
   ngtcp2_tstamp ts = timestamp();
   struct sockaddr_storage remote_addr;
@@ -1725,19 +1728,6 @@ static CURLcode ng_flush_egress(struct Curl_easy *data,
   nghttp3_vec vec[16];
   ssize_t ndatalen;
   uint32_t flags;
-
-  switch(qs->local_addr.ss_family) {
-  case AF_INET:
-    pktlen = NGTCP2_MAX_PKTLEN_IPV4;
-    break;
-#ifdef ENABLE_IPV6
-  case AF_INET6:
-    pktlen = NGTCP2_MAX_PKTLEN_IPV6;
-    break;
-#endif
-  default:
-    assert(0);
-  }
 
   rv = ngtcp2_conn_handle_expiry(qs->qconn, ts);
   if(rv) {
@@ -1765,7 +1755,8 @@ static CURLcode ng_flush_egress(struct Curl_easy *data,
 
     flags = NGTCP2_WRITE_STREAM_FLAG_MORE |
             (fin ? NGTCP2_WRITE_STREAM_FLAG_FIN : 0);
-    outlen = ngtcp2_conn_writev_stream(qs->qconn, &ps.path, NULL, out, pktlen,
+    outlen = ngtcp2_conn_writev_stream(qs->qconn, &ps.path, NULL, out,
+                                       sizeof(out),
                                        &ndatalen, flags, stream_id,
                                        (const ngtcp2_vec *)vec, veccnt, ts);
     if(outlen == 0) {
