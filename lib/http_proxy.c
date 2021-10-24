@@ -210,6 +210,9 @@ static void connect_done(struct Curl_easy *data)
     /* restore the protocol pointer */
     data->req.p.http = s->prot_save;
     s->prot_save = NULL;
+    data->info.httpcode = 0; /* clear it as it might've been used for the
+                                proxy */
+    data->req.ignorebody = FALSE;
     infof(data, "CONNECT phase completed!");
   }
 }
@@ -284,8 +287,7 @@ static CURLcode CONNECT(struct Curl_easy *data,
         /* This only happens if we've looped here due to authentication
            reasons, and we don't really use the newly cloned URL here
            then. Just free() it. */
-      free(data->req.newurl);
-      data->req.newurl = NULL;
+      Curl_safefree(data->req.newurl);
 
       /* initialize send-buffer */
       Curl_dyn_init(req, DYN_HTTP_REQUEST);
@@ -805,6 +807,14 @@ static CURLcode CONNECT(struct Curl_easy *data,
         goto error;
       }
 
+      infof(data, "Establish HTTP proxy tunnel to %s:%d",
+            hostname, remote_port);
+
+        /* This only happens if we've looped here due to authentication
+           reasons, and we don't really use the newly cloned URL here
+           then. Just free() it. */
+      Curl_safefree(data->req.newurl);
+
       result = CONNECT_host(data, conn, hostname, remote_port,
                             &hostheader, &host);
       if(result)
@@ -815,6 +825,15 @@ static CURLcode CONNECT(struct Curl_easy *data,
         failf(data, "error setting path");
         result = CURLE_OUT_OF_MEMORY;
         goto error;
+      }
+      if(data->set.verbose) {
+        char *se = aprintf("CONNECT %s HTTP/1.1\r\n", hostheader);
+        if(!se) {
+          result = CURLE_OUT_OF_MEMORY;
+          goto error;
+        }
+        Curl_debug(data, CURLINFO_HEADER_OUT, se, strlen(se));
+        free(se);
       }
       /* Setup the proxy-authorization header, if any */
       result = Curl_http_output_auth(data, conn, "CONNECT", HTTPREQ_GET,
@@ -936,11 +955,18 @@ static CURLcode CONNECT(struct Curl_easy *data,
     default:
       break;
     }
+
+    /* If we are supposed to continue and request a new URL, which basically
+     * means the HTTP authentication is still going on so if the tunnel
+     * is complete we start over in INIT state */
+    if(data->req.newurl && (TUNNEL_COMPLETE == s->tunnel_state)) {
+      infof(data, "CONNECT request done, loop to make another");
+      connect_init(data, TRUE); /* reinit */
+    }
   } while(data->req.newurl);
 
   result = CURLE_OK;
   if(s->tunnel_state == TUNNEL_COMPLETE) {
-    data->info.httpproxycode = data->req.httpcode;
     if(data->info.httpproxycode/100 != 2) {
       if(conn->bits.close && data->req.newurl) {
         conn->bits.proxy_connect_closed = TRUE;
