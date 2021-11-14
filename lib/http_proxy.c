@@ -198,21 +198,25 @@ static CURLcode connect_init(struct Curl_easy *data, bool reinit)
   return CURLE_OK;
 }
 
-static void connect_done(struct Curl_easy *data)
+void Curl_connect_done(struct Curl_easy *data)
 {
   struct connectdata *conn = data->conn;
   struct http_connect_state *s = conn->connect_state;
-  if(s->tunnel_state != TUNNEL_EXIT) {
+  if(s && (s->tunnel_state != TUNNEL_EXIT)) {
     s->tunnel_state = TUNNEL_EXIT;
     Curl_dyn_free(&s->rcvbuf);
     Curl_dyn_free(&s->req);
 
-    /* restore the protocol pointer */
-    data->req.p.http = s->prot_save;
+    /* restore the protocol pointer, if not already done */
+    if(s->prot_save)
+      data->req.p.http = s->prot_save;
     s->prot_save = NULL;
     data->info.httpcode = 0; /* clear it as it might've been used for the
                                 proxy */
     data->req.ignorebody = FALSE;
+#ifdef USE_HYPER
+    data->state.hconnect = FALSE;
+#endif
     infof(data, "CONNECT phase completed!");
   }
 }
@@ -659,7 +663,7 @@ static CURLcode CONNECT(struct Curl_easy *data,
     if(s->close_connection && data->req.newurl) {
       conn->bits.proxy_connect_closed = TRUE;
       infof(data, "Connect me again please");
-      connect_done(data);
+      Curl_connect_done(data);
     }
     else {
       free(data->req.newurl);
@@ -971,7 +975,7 @@ static CURLcode CONNECT(struct Curl_easy *data,
       if(conn->bits.close && data->req.newurl) {
         conn->bits.proxy_connect_closed = TRUE;
         infof(data, "Connect me again please");
-        connect_done(data);
+        Curl_connect_done(data);
       }
       else {
         free(data->req.newurl);
@@ -1045,7 +1049,7 @@ CURLcode Curl_proxyCONNECT(struct Curl_easy *data,
   result = CONNECT(data, sockindex, hostname, remote_port);
 
   if(result || Curl_connect_complete(conn))
-    connect_done(data);
+    Curl_connect_done(data);
 
   return result;
 }
