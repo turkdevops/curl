@@ -1,3 +1,5 @@
+c: Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+SPDX-License-Identifier: curl
 Long: netrc
 Short: n
 Help: Must read .netrc for user name and password
@@ -20,4 +22,4 @@ could look similar to:
 
  machine host.domain.com
  login myself
- password secret"
+ password secret
