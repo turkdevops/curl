@@ -1,5 +1,3 @@
-#ifndef HEADER_CURL_INET_PTON_H
-#define HEADER_CURL_INET_PTON_H
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -23,26 +21,30 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
+#include "test.h"
+#include "curl_memory.h"
 
-#include "curl_setup.h"
+#ifndef CURL_STATICLIB
 
-int curlx_inet_pton(int, const char *, void *);
-
-#ifdef HAVE_INET_PTON
-#ifdef HAVE_NETINET_IN_H
-#include <netinet/in.h>
-#endif
-#ifdef HAVE_SYS_SOCKET_H
-#include <sys/socket.h>
-#endif
-#ifdef HAVE_ARPA_INET_H
-#include <arpa/inet.h>
-#endif
-#ifdef __AMIGA__
-#define curlx_inet_pton(x,y,z) inet_pton(x,(unsigned char *)CURL_UNCONST(y),z)
-#else
-#define curlx_inet_pton(x,y,z) inet_pton(x,y,z)
-#endif
+#if defined(_MSC_VER) && defined(_DLL)
+#  pragma warning(push)
+#  pragma warning(disable:4232) /* MSVC extension, dllimport identity */
 #endif
 
-#endif /* HEADER_CURL_INET_PTON_H */
+/* when libcurl is *not* static and we build libtests, the global pointers in
+   curl_memory.c is not available unless we provide them like this */
+
+curl_malloc_callback Curl_cmalloc = (curl_malloc_callback)malloc;
+curl_free_callback Curl_cfree = (curl_free_callback)free;
+curl_realloc_callback Curl_crealloc = (curl_realloc_callback)realloc;
+curl_strdup_callback Curl_cstrdup = (curl_strdup_callback)strdup;
+curl_calloc_callback Curl_ccalloc = (curl_calloc_callback)calloc;
+#if defined(_WIN32) && defined(UNICODE)
+curl_wcsdup_callback Curl_cwcsdup = wcsdup;
+#endif
+
+#if defined(_MSC_VER) && defined(_DLL)
+#  pragma warning(pop)
+#endif
+
+#endif /* !CURL_STATICLIB */
