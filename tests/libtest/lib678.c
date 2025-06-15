@@ -73,7 +73,7 @@ static CURLcode test_cert_blob(const char *url, const char *cafile)
 
   curl = curl_easy_init();
   if(!curl) {
-    fprintf(stderr, "curl_easy_init() failed\n");
+    curl_mfprintf(stderr, "curl_easy_init() failed\n");
     return CURLE_FAILED_INIT;
   }
 
@@ -97,7 +97,7 @@ static CURLcode test_cert_blob(const char *url, const char *cafile)
   return code;
 }
 
-CURLcode test(char *URL)
+static CURLcode test_lib678(char *URL)
 {
   CURLcode res = CURLE_OK;
   curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -109,7 +109,7 @@ CURLcode test(char *URL)
     if(e) {
       w = curl_easy_setopt(e, CURLOPT_CAINFO_BLOB, &blob);
       if(w)
-        printf("CURLOPT_CAINFO_BLOB is not supported\n");
+        curl_mprintf("CURLOPT_CAINFO_BLOB is not supported\n");
       curl_easy_cleanup(e);
     }
     res = w;

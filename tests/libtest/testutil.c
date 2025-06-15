@@ -130,45 +130,31 @@ double tutil_tvdiff_secs(struct timeval newer, struct timeval older)
   return (double)(newer.tv_usec-older.tv_usec)/1000000.0;
 }
 
-#ifdef _WIN32
-HMODULE win32_load_system_library(const TCHAR *filename)
+/* build request url */
+char *tutil_suburl(const char *base, int i)
 {
-#if defined(CURL_WINDOWS_UWP) || defined(UNDER_CE)
-  (void)filename;
-  return NULL;
-#else
-  size_t filenamelen = _tcslen(filename);
-  size_t systemdirlen = GetSystemDirectory(NULL, 0);
-  size_t written;
-  TCHAR *path;
-  HMODULE module;
+  return curl_maprintf("%s%.4d", base, i);
+}
 
-  if(!filenamelen || filenamelen > 32768 ||
-     !systemdirlen || systemdirlen > 32768)
-    return NULL;
-
-  /* systemdirlen includes null character */
-  path = malloc(sizeof(TCHAR) * (systemdirlen + 1 + filenamelen));
-  if(!path)
-    return NULL;
-
-  /* if written >= systemdirlen then nothing was written */
-  written = GetSystemDirectory(path, (unsigned int)systemdirlen);
-  if(!written || written >= systemdirlen) {
-    free(path);
-    return NULL;
+#if defined(HAVE_GETRLIMIT) && defined(HAVE_SETRLIMIT)
+void tutil_rlim2str(char *buf, size_t len, rlim_t val)
+{
+#ifdef RLIM_INFINITY
+  if(val == RLIM_INFINITY) {
+    curl_msnprintf(buf, len, "INFINITY");
+    return;
   }
-
-  if(path[written - 1] != _T('\\'))
-    path[written++] = _T('\\');
-
-  _tcscpy(path + written, filename);
-
-  module = LoadLibrary(path);
-
-  free(path);
-
-  return module;
 #endif
+#ifdef HAVE_LONGLONG
+  if(sizeof(rlim_t) > sizeof(long))
+    curl_msnprintf(buf, len, "%llu", (unsigned long long)val);
+  else
+#endif
+  {
+    if(sizeof(rlim_t) < sizeof(long))
+      curl_msnprintf(buf, len, "%u", (unsigned int)val);
+    else
+      curl_msnprintf(buf, len, "%lu", (unsigned long)val);
+  }
 }
 #endif

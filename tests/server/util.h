@@ -23,7 +23,27 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
-#include "server_setup.h"
+#include "curl_setup.h"
+
+/* adjust for old MSVC */
+#if defined(_MSC_VER) && (_MSC_VER < 1900)
+#  define snprintf _snprintf
+#endif
+
+#ifdef _WIN32
+#  define CURL_STRNICMP(p1, p2, n) _strnicmp(p1, p2, n)
+#elif defined(HAVE_STRCASECMP)
+#  ifdef HAVE_STRINGS_H
+#    include <strings.h>
+#  endif
+#  define CURL_STRNICMP(p1, p2, n) strncasecmp(p1, p2, n)
+#elif defined(HAVE_STRCMPI)
+#  define CURL_STRNICMP(p1, p2, n) strncmpi(p1, p2, n)
+#elif defined(HAVE_STRICMP)
+#  define CURL_STRNICMP(p1, p2, n) strnicmp(p1, p2, n)
+#else
+#  error "missing case insensitive comparison function"
+#endif
 
 enum {
   DOCNUMBER_NOTHING    = -7,
@@ -101,6 +121,17 @@ void restore_signal_handlers(bool keep_sigalrm);
 int bind_unix_socket(curl_socket_t sock, const char *unix_socket,
                      struct sockaddr_un *sau);
 #endif /* USE_UNIX_SOCKETS */
+
+typedef union {
+  struct sockaddr      sa;
+  struct sockaddr_in   sa4;
+#ifdef USE_IPV6
+  struct sockaddr_in6  sa6;
+#endif
+#ifdef USE_UNIX_SOCKETS
+  struct sockaddr_un   sau;
+#endif
+} srvr_sockaddr_union_t;
 
 unsigned short util_ultous(unsigned long ulnum);
 

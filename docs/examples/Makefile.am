@@ -57,7 +57,7 @@ LDADD = $(LIBDIR)/libcurl.la @LIBCURL_PC_LIBS_PRIVATE@
 # This might hold -Werror
 CFLAGS += @CURL_CFLAG_EXTRAS@
 
-# Makefile.inc provides the check_PROGRAMS and COMPLICATED_EXAMPLES defines
+# Get check_PROGRAMS variable
 include Makefile.inc
 
 all: $(check_PROGRAMS)
@@ -69,3 +69,10 @@ CS_ = $(CS_0)
 
 checksrc:
 	$(CHECKSRC)(@PERL@ $(top_srcdir)/scripts/checksrc.pl -D$(srcdir) $(srcdir)/*.c)
+
+if NOT_CURL_CI
+if DEBUGBUILD
+# for debug builds, we scan the sources on all regular make invokes
+all-local: checksrc
+endif
+endif

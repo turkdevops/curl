@@ -52,6 +52,7 @@ if [ "${BUILD_SYSTEM}" = 'CMake' ]; then
     [ "${_chkprefill}" = '_chkprefill' ] && options+=' -D_CURL_PREFILL=OFF'
     [[ "${TARGET}" = *'ARM64'* ]] && SKIP_RUN='ARM64 architecture'
     [ -n "${TOOLSET:-}" ] && options+=" -T ${TOOLSET}"
+    [ -n "${WINTARGET:-}" ] && options+=" -DCURL_TARGET_WINDOWS_VERSION=${WINTARGET}"
     [ "${OPENSSL}" = 'ON' ] && options+=" -DOPENSSL_ROOT_DIR=${openssl_root_win}"
     [ -n "${CURLDEBUG:-}" ] && options+=" -DENABLE_CURLDEBUG=${CURLDEBUG}"
     if [ "${APPVEYOR_BUILD_WORKER_IMAGE}" = 'Visual Studio 2013' ]; then
@@ -67,7 +68,6 @@ if [ "${BUILD_SYSTEM}" = 'CMake' ]; then
     fi
     # shellcheck disable=SC2086
     time cmake -G "${PRJ_GEN}" ${TARGET} \
-      -DCURL_TEST_BUNDLES=ON \
       -DCURL_WERROR=ON \
       -DBUILD_SHARED_LIBS="${SHARED}" \
       -DCURL_STATIC_CRT=ON \

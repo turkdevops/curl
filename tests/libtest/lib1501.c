@@ -29,14 +29,15 @@
 #include "warnless.h"
 #include "memdebug.h"
 
+#undef TEST_HANG_TIMEOUT
 #define TEST_HANG_TIMEOUT 30 * 1000
 
-/* 500 milliseconds allowed. An extreme number but lets be really conservative
-   to allow old and slow machines to run this test too */
-#define MAX_BLOCKED_TIME_MS 500
-
-CURLcode test(char *URL)
+static CURLcode test_lib1501(char *URL)
 {
+  /* 500 milliseconds allowed. An extreme number but lets be really
+     conservative to allow old and slow machines to run this test too */
+  static const int MAX_BLOCKED_TIME_MS = 500;
+
   CURL *handle = NULL;
   CURLM *mhandle = NULL;
   CURLcode res = CURLE_OK;
@@ -84,7 +85,7 @@ CURLcode test(char *URL)
 
     abort_on_test_timeout();
 
-    fprintf(stderr, "ping\n");
+    curl_mfprintf(stderr, "ping\n");
     before = tutil_tvnow();
 
     multi_perform(mhandle, &still_running);
@@ -93,7 +94,7 @@ CURLcode test(char *URL)
 
     after = tutil_tvnow();
     e = tutil_tvdiff(after, before);
-    fprintf(stderr, "pong = %ld\n", e);
+    curl_mfprintf(stderr, "pong = %ld\n", e);
 
     if(e > MAX_BLOCKED_TIME_MS) {
       res = CURLE_TOO_LARGE;
