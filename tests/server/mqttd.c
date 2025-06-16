@@ -21,7 +21,7 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
-#include "server_setup.h"
+#include "curl_setup.h"
 #include <stdlib.h>
 #include <string.h>
 #include "util.h"
@@ -53,15 +53,13 @@
 #include <netdb.h>
 #endif
 
-#include "curlx.h" /* from the private lib dir */
+#include <curlx.h> /* from the private lib dir */
 #include "getpart.h"
-#include "server_sockaddr.h"
-#include "warnless.h"
 
 #include "tool_binmode.h"
 
 /* include memdebug.h last */
-#include "memdebug.h"
+#include <memdebug.h>
 
 #define MQTT_MSG_CONNECT    0x10
 #define MQTT_MSG_CONNACK    0x20
@@ -158,13 +156,13 @@ static void logprotocol(mqttdir dir,
   int left = sizeof(data);
 
   for(i = 0; i < len && (left >= 0); i++) {
-    msnprintf(optr, left, "%02x", ptr[i]);
+    snprintf(optr, left, "%02x", ptr[i]);
     optr += 2;
     left -= 2;
   }
-  fprintf(output, "%s %s %zx %s\n",
+  fprintf(output, "%s %s %x %s\n",
           dir == FROM_CLIENT ? "client" : "server",
-          prefix, remlen, data);
+          prefix, (int)remlen, data);
 }
 
 
@@ -447,7 +445,7 @@ static curl_socket_t mqttit(curl_socket_t fd)
     'M','Q','T','T',  /* protocol name */
     0x04              /* protocol level */
   };
-  msnprintf(dumpfile, sizeof(dumpfile), "%s/%s", logdir, REQUEST_DUMP);
+  snprintf(dumpfile, sizeof(dumpfile), "%s/%s", logdir, REQUEST_DUMP);
   dump = fopen(dumpfile, "ab");
   if(!dump)
     goto end;
@@ -584,6 +582,12 @@ static curl_socket_t mqttit(curl_socket_t fd)
 
       logmsg("SUBSCRIBE to '%s' [%d]", topic, packet_id);
       stream = test2fopen(testno, logdir);
+      if(!stream) {
+        error = errno;
+        logmsg("fopen() failed with error (%d) %s", error, strerror(error));
+        logmsg("Couldn't open test file %ld", testno);
+        goto end;
+      }
       error = getpart(&data, &datalen, "reply", "data", stream);
       if(!error) {
         if(!m_config.publish_before_suback) {
@@ -716,12 +720,11 @@ static bool mqttd_incoming(curl_socket_t listenfd)
       curl_socket_t newfd = accept(sockfd, NULL, NULL);
       if(CURL_SOCKET_BAD == newfd) {
         error = SOCKERRNO;
-        logmsg("accept(%" FMT_SOCKET_T ", NULL, NULL) "
-               "failed with error (%d) %s", sockfd, error, sstrerror(error));
+        logmsg("accept() failed with error (%d) %s", error, sstrerror(error));
       }
       else {
-        logmsg("====> Client connect, fd %" FMT_SOCKET_T ". "
-               "Read config from %s", newfd, configfile);
+        logmsg("====> Client connect, fd %ld. "
+               "Read config from %s", (long)newfd, configfile);
         set_advisor_read_lock(loglockfile);
         (void)mqttit(newfd); /* until done */
         clear_advisor_read_lock(loglockfile);
@@ -868,8 +871,8 @@ static curl_socket_t mqttd_sockdaemon(curl_socket_t sock,
   rc = listen(sock, 5);
   if(0 != rc) {
     error = SOCKERRNO;
-    logmsg("listen(%" FMT_SOCKET_T ", 5) failed with error (%d) %s",
-           sock, error, sstrerror(error));
+    logmsg("listen(%ld, 5) failed with error (%d) %s",
+           (long)sock, error, sstrerror(error));
     sclose(sock);
     return CURL_SOCKET_BAD;
   }
@@ -878,7 +881,7 @@ static curl_socket_t mqttd_sockdaemon(curl_socket_t sock,
 }
 
 
-int main(int argc, char *argv[])
+static int test_mqttd(int argc, char *argv[])
 {
   curl_socket_t sock = CURL_SOCKET_BAD;
   curl_socket_t msgsock = CURL_SOCKET_BAD;
@@ -975,8 +978,8 @@ int main(int argc, char *argv[])
     }
   }
 
-  msnprintf(loglockfile, sizeof(loglockfile), "%s/%s/mqtt-%s.lock",
-            logdir, SERVERLOGS_LOCKDIR, ipv_inuse);
+  snprintf(loglockfile, sizeof(loglockfile), "%s/%s/mqtt-%s.lock",
+           logdir, SERVERLOGS_LOCKDIR, ipv_inuse);
 
 #ifdef _WIN32
   if(win32_init())

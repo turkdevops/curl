@@ -39,6 +39,7 @@
 #  include <fcntl.h>
 #endif
 
+#include "testutil.h"
 #include "warnless.h"
 #include "memdebug.h"
 
@@ -48,12 +49,13 @@
                              ((int)((unsigned char)((p)[3]))))
 
 #define RTP_DATA_SIZE 12
-static const char *RTP_DATA = "$_1234\n\0Rsdf";
 
 static int rtp_packet_count = 0;
 
 static size_t rtp_write(char *ptr, size_t size, size_t nmemb, void *stream)
 {
+  static const char *RTP_DATA = "$_1234\n\0Rsdf";
+
   char *data = (char *)ptr;
   int channel = RTP_PKT_CHANNEL(data);
   int message_size;
@@ -64,10 +66,11 @@ static size_t rtp_write(char *ptr, size_t size, size_t nmemb, void *stream)
 
   message_size = curlx_uztosi(size * nmemb) - 4;
 
-  printf("RTP: message size %d, channel %d\n", message_size, channel);
+  curl_mprintf("RTP: message size %d, channel %d\n", message_size, channel);
   if(message_size != coded_size) {
-    printf("RTP embedded size (%d) does not match the write size (%d).\n",
-           coded_size, message_size);
+    curl_mprintf("RTP embedded size (%d) does not match "
+                 "the write size (%d).\n",
+                 coded_size, message_size);
     return failure;
   }
 
@@ -75,32 +78,26 @@ static size_t rtp_write(char *ptr, size_t size, size_t nmemb, void *stream)
   for(i = 0; i < message_size; i += RTP_DATA_SIZE) {
     if(message_size - i > RTP_DATA_SIZE) {
       if(memcmp(RTP_DATA, data + i, RTP_DATA_SIZE) != 0) {
-        printf("RTP PAYLOAD CORRUPTED [%s]\n", data + i);
+        curl_mprintf("RTP PAYLOAD CORRUPTED [%s]\n", data + i);
         /* return failure; */
       }
     }
     else {
       if(memcmp(RTP_DATA, data + i, message_size - i) != 0) {
-        printf("RTP PAYLOAD END CORRUPTED (%d), [%s]\n",
-               message_size - i, data + i);
+        curl_mprintf("RTP PAYLOAD END CORRUPTED (%d), [%s]\n",
+                     message_size - i, data + i);
         /* return failure; */
       }
     }
   }
 
   rtp_packet_count++;
-  fprintf(stderr, "packet count is %d\n", rtp_packet_count);
+  curl_mfprintf(stderr, "packet count is %d\n", rtp_packet_count);
 
   return size * nmemb;
 }
 
-/* build request url */
-static char *suburl(const char *base, int i)
-{
-  return curl_maprintf("%s%.4d", base, i);
-}
-
-CURLcode test(char *URL)
+static CURLcode test_lib571(char *URL)
 {
   CURLcode res;
   CURL *curl;
@@ -109,26 +106,26 @@ CURLcode test(char *URL)
 
   FILE *protofile = fopen(libtest_arg2, "wb");
   if(!protofile) {
-    fprintf(stderr, "Couldn't open the protocol dump file\n");
+    curl_mfprintf(stderr, "Couldn't open the protocol dump file\n");
     return TEST_ERR_MAJOR_BAD;
   }
 
   if(curl_global_init(CURL_GLOBAL_ALL) != CURLE_OK) {
-    fprintf(stderr, "curl_global_init() failed\n");
+    curl_mfprintf(stderr, "curl_global_init() failed\n");
     fclose(protofile);
     return TEST_ERR_MAJOR_BAD;
   }
 
   curl = curl_easy_init();
   if(!curl) {
-    fprintf(stderr, "curl_easy_init() failed\n");
+    curl_mfprintf(stderr, "curl_easy_init() failed\n");
     fclose(protofile);
     curl_global_cleanup();
     return TEST_ERR_MAJOR_BAD;
   }
   test_setopt(curl, CURLOPT_URL, URL);
 
-  stream_uri = suburl(URL, request++);
+  stream_uri = tutil_suburl(URL, request++);
   if(!stream_uri) {
     res = TEST_ERR_MAJOR_BAD;
     goto test_cleanup;
@@ -150,7 +147,7 @@ CURLcode test(char *URL)
     goto test_cleanup;
 
   /* This PLAY starts the interleave */
-  stream_uri = suburl(URL, request++);
+  stream_uri = tutil_suburl(URL, request++);
   if(!stream_uri) {
     res = TEST_ERR_MAJOR_BAD;
     goto test_cleanup;
@@ -165,7 +162,7 @@ CURLcode test(char *URL)
     goto test_cleanup;
 
   /* The DESCRIBE request will try to consume data after the Content */
-  stream_uri = suburl(URL, request++);
+  stream_uri = tutil_suburl(URL, request++);
   if(!stream_uri) {
     res = TEST_ERR_MAJOR_BAD;
     goto test_cleanup;
@@ -179,7 +176,7 @@ CURLcode test(char *URL)
   if(res)
     goto test_cleanup;
 
-  stream_uri = suburl(URL, request++);
+  stream_uri = tutil_suburl(URL, request++);
   if(!stream_uri) {
     res = TEST_ERR_MAJOR_BAD;
     goto test_cleanup;
@@ -193,11 +190,11 @@ CURLcode test(char *URL)
   if(res)
     goto test_cleanup;
 
-  fprintf(stderr, "PLAY COMPLETE\n");
+  curl_mfprintf(stderr, "PLAY COMPLETE\n");
 
   /* Use Receive to get the rest of the data */
   while(!res && rtp_packet_count < 19) {
-    fprintf(stderr, "LOOPY LOOP!\n");
+    curl_mfprintf(stderr, "LOOPY LOOP!\n");
     test_setopt(curl, CURLOPT_RTSP_REQUEST, CURL_RTSPREQ_RECEIVE);
     res = curl_easy_perform(curl);
   }

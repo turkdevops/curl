@@ -45,7 +45,7 @@ struct dynbuf;
 #define SSLSUPP_SIGNATURE_ALGORITHMS (1<<10) /* supports TLS sigalgs */
 
 #ifdef USE_ECH
-# include "../curl_base64.h"
+# include "../curlx/base64.h"
 # define ECH_ENABLED(__data__) \
     (__data__->set.tls_ech && \
      !(__data__->set.tls_ech & CURLECH_DISABLE)\
@@ -190,8 +190,6 @@ CURLcode Curl_pin_peer_pubkey(struct Curl_easy *data,
 
 bool Curl_ssl_cert_status_request(void);
 
-bool Curl_ssl_false_start(void);
-
 /* The maximum size of the SSL channel binding is 85 bytes, as defined in
  * RFC 5929, Section 4.1. The 'tls-server-end-point:' prefix is 21 bytes long,
  * and SHA-512 is the longest supported hash algorithm, with a digest length of
@@ -274,7 +272,6 @@ extern struct Curl_cftype Curl_cft_ssl_proxy;
 #define Curl_ssl_free_certinfo(x) Curl_nop_stmt
 #define Curl_ssl_random(x,y,z) ((void)x, CURLE_NOT_BUILT_IN)
 #define Curl_ssl_cert_status_request() FALSE
-#define Curl_ssl_false_start() FALSE
 #define Curl_ssl_get_internals(a,b,c,d) NULL
 #define Curl_ssl_supports(a,b) FALSE
 #define Curl_ssl_cfilter_add(a,b,c) CURLE_NOT_BUILT_IN

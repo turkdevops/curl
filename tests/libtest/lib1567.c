@@ -27,7 +27,7 @@
 
 #include <curl/multi.h>
 
-CURLcode test(char *URL)
+static CURLcode test_lib1567(char *URL)
 {
   CURL *curl = NULL;
   CURLcode res = CURLE_OK;
@@ -46,7 +46,7 @@ CURLcode test(char *URL)
       if(res)
         goto test_cleanup;
 
-      fprintf(stderr, "****************************** Do it again\n");
+      curl_mfprintf(stderr, "****************************** Do it again\n");
       res = curl_easy_perform(curl);
     }
   }

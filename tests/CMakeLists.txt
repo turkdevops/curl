@@ -23,7 +23,7 @@
 ###########################################################################
 find_program(TEST_NGHTTPX "nghttpx")
 if(NOT TEST_NGHTTPX)
-  set(TEST_NGHTTPX "nghttpx")
+  set(TEST_NGHTTPX "")
 endif()
 mark_as_advanced(TEST_NGHTTPX)
 # Consumed variables: TEST_NGHTTPX
@@ -42,6 +42,7 @@ add_subdirectory(tunit)
 add_subdirectory(unit)
 add_subdirectory(certs)
 
+# Add a runtests target with customized flags
 function(curl_add_runtests _targetname _test_flags)
   if(NOT BUILD_LIBCURL_DOCS)
     string(APPEND _test_flags " !documentation")
@@ -68,6 +69,7 @@ function(curl_add_runtests _targetname _test_flags)
   )
 endfunction()
 
+# Add a pytests target with customized flags
 function(curl_add_pytests _targetname _test_flags)
   set(_depends "")
   if(NOT _targetname STREQUAL "pytest-ci")
@@ -111,5 +113,5 @@ curl_add_runtests(test-ci        "-a -p ~flaky ~timing-dependent -r --retry=5 -j
 curl_add_runtests(test-torture   "-a -t -j20")
 curl_add_runtests(test-event     "-a -e")
 
-curl_add_pytests(curl-pytest      "")
-curl_add_pytests(curl-pytest-ci   "-v")
+curl_add_pytests(curl-pytest      "-n auto")
+curl_add_pytests(curl-pytest-ci   "-n auto -v")

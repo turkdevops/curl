@@ -21,24 +21,14 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
-#include "server_setup.h"
+#include "curl_setup.h"
 
 #include "getpart.h"
-
-#ifdef TEST
-#include "curl/curl.h"
-#include "warnless.h"
-#else
-#include "curlx.h" /* from the private lib dir */
-#endif
-
-#include "curl_base64.h"
+#include <curlx.h> /* from the private lib dir */
 #include "curl_memory.h"
 
-#ifndef TEST
 /* include memdebug.h last */
-#include "memdebug.h"
-#endif
+#include <memdebug.h>
 
 #define EAT_SPACE(p) while(*(p) && ISSPACE(*(p))) (p)++
 
@@ -52,8 +42,6 @@
 
 #if defined(UNDER_CE)
 #define system_strdup _strdup
-#elif !defined(HAVE_STRDUP)
-#define system_strdup Curl_strdup
 #else
 #define system_strdup strdup
 #endif
@@ -69,13 +57,12 @@ curl_realloc_callback Curl_crealloc = (curl_realloc_callback)realloc;
 curl_strdup_callback Curl_cstrdup = (curl_strdup_callback)system_strdup;
 curl_calloc_callback Curl_ccalloc = (curl_calloc_callback)calloc;
 #if defined(_WIN32) && defined(UNICODE)
-curl_wcsdup_callback Curl_cwcsdup = Curl_wcsdup;
+curl_wcsdup_callback Curl_cwcsdup = NULL; /* not use in test code */
 #endif
 
 #if defined(_MSC_VER) && defined(_DLL)
 #  pragma warning(pop)
 #endif
-
 
 /*
  * line_length()
@@ -121,7 +108,6 @@ static size_t line_length(const char *buffer, int bytestocheck)
  *   GPE_END_OF_FILE
  *   GPE_OK
  */
-
 static int readline(char **buffer, size_t *bufsize, size_t *length,
                     FILE *stream)
 {
@@ -175,7 +161,7 @@ static int readline(char **buffer, size_t *bufsize, size_t *length,
  *
  * If the source buffer is indicated to be base64 encoded, this appends the
  * decoded data, binary or whatever, to the destination. The source buffer
- * may not hold binary data, only a null terminated string is valid content.
+ * may not hold binary data, only a null-terminated string is valid content.
  *
  * Destination buffer will be enlarged and relocated as needed.
  *
@@ -186,7 +172,6 @@ static int readline(char **buffer, size_t *bufsize, size_t *length,
  *   GPE_OUT_OF_MEMORY
  *   GPE_OK
  */
-
 static int appenddata(char  **dst_buf,   /* dest buffer */
                       size_t *dst_len,   /* dest buffer data length */
                       size_t *dst_alloc, /* dest buffer allocated size */
@@ -276,7 +261,7 @@ static int decodedata(char  **buf,   /* dest buffer */
  * and the size of the data is stored at the addresses that caller specifies.
  *
  * If the returned data is a string the returned size will be the length of
- * the string excluding null termination. Otherwise it will just be the size
+ * the string excluding null-termination. Otherwise it will just be the size
  * of the returned binary data.
  *
  * Calling function is responsible to free returned buffer.
@@ -286,7 +271,6 @@ static int decodedata(char  **buf,   /* dest buffer */
  *   GPE_OUT_OF_MEMORY
  *   GPE_OK
  */
-
 int getpart(char **outbuf, size_t *outlen,
             const char *main, const char *sub, FILE *stream)
 {
@@ -494,29 +478,3 @@ int getpart(char **outbuf, size_t *outlen,
 
   return error;
 }
-
-#ifdef TEST
-#include "../../lib/base64.c"
-#include "../../lib/warnless.c"
-/* Build with:
- * $ gcc getpart.c -DTEST -I../../include -I../../lib -DHAVE_CONFIG_H
- */
-int main(int argc, char **argv)
-{
-  if(argc < 3) {
-    printf("./getpart main sub\n");
-  }
-  else {
-    char  *part;
-    size_t partlen;
-    int rc = getpart(&part, &partlen, argv[1], argv[2], stdin);
-    size_t i;
-    if(rc)
-      return rc;
-    for(i = 0; i < partlen; i++)
-      printf("%c", part[i]);
-    free(part);
-  }
-  return 0;
-}
-#endif

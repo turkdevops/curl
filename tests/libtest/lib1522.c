@@ -30,8 +30,6 @@
 #include "warnless.h"
 #include "memdebug.h"
 
-static char g_Data[40 * 1024]; /* POST 40KB */
-
 static int sockopt_callback(void *clientp, curl_socket_t curlfd,
                             curlsocktype purpose)
 {
@@ -49,8 +47,10 @@ static int sockopt_callback(void *clientp, curl_socket_t curlfd,
   return CURL_SOCKOPT_OK;
 }
 
-CURLcode test(char *URL)
+static CURLcode test_lib1522(char *URL)
 {
+  static char g_Data[40 * 1024]; /* POST 40KB */
+
   CURLcode code = TEST_ERR_MAJOR_BAD;
   CURLcode res;
   struct curl_slist *pHeaderList = NULL;
@@ -79,18 +79,18 @@ CURLcode test(char *URL)
     curl_off_t uploadSize;
     curl_easy_getinfo(curl, CURLINFO_SIZE_UPLOAD_T, &uploadSize);
 
-    printf("uploadSize = %ld\n", (long)uploadSize);
+    curl_mprintf("uploadSize = %ld\n", (long)uploadSize);
 
     if((size_t) uploadSize == sizeof(g_Data)) {
-      printf("!!!!!!!!!! PASS\n");
+      curl_mprintf("!!!!!!!!!! PASS\n");
     }
     else {
-      printf("sent %d, libcurl says %d\n",
-             (int)sizeof(g_Data), (int)uploadSize);
+      curl_mprintf("sent %d, libcurl says %d\n",
+                   (int)sizeof(g_Data), (int)uploadSize);
     }
   }
   else {
-    printf("curl_easy_perform() failed. e = %d\n", code);
+    curl_mprintf("curl_easy_perform() failed. e = %d\n", code);
   }
 test_cleanup:
   curl_slist_free_all(pHeaderList);
